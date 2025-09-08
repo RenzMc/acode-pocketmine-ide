@@ -16,9 +16,9 @@ const pocketmineIde = {
   description: plugin.description,
   
   /**
-   * Settings for the plugin
+   * Current settings values
    */
-  settings: {
+  currentSettings: {
     pocketMinePath: null,
     autoIndex: true,
     showCompletionInfo: true,
@@ -59,7 +59,7 @@ const pocketmineIde = {
     this.registerEditorCommands();
     
     // Auto-index if path is set and auto-index is enabled
-    if (this.settings.pocketMinePath && this.settings.autoIndex) {
+    if (this.currentSettings.pocketMinePath && this.currentSettings.autoIndex) {
       this.indexPhpFiles();
     }
   },
@@ -72,7 +72,7 @@ const pocketmineIde = {
       if (this.cacheFile && await this.cacheFile.exists()) {
         const data = await this.cacheFile.readFile('utf8');
         if (data) {
-          this.settings = { ...this.settings, ...JSON.parse(data) };
+          this.currentSettings = { ...this.currentSettings, ...JSON.parse(data) };
         }
       }
     } catch (error) {
@@ -86,15 +86,28 @@ const pocketmineIde = {
   async saveSettings() {
     try {
       if (this.cacheFile) {
-        await this.cacheFile.writeFile(JSON.stringify(this.settings));
+        await this.cacheFile.writeFile(JSON.stringify(this.currentSettings));
       }
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
   },
+
+  /**
+   * Handle settings changes from Acode settings UI
+   */
+  onSettingsChange(key, value) {
+    this.currentSettings[key] = value;
+    this.saveSettings();
+    
+    // Handle specific setting changes
+    if (key === 'pocketMinePath' && value && this.currentSettings.autoIndex) {
+      this.indexPhpFiles();
+    }
+  },
   
   /**
-   * Create settings UI using DialogBox
+   * Create settings UI using DialogBox (fallback method)
    */
   createSettingsUI() {
     const DialogBox = acode.require('dialogBox');
@@ -108,7 +121,7 @@ const pocketmineIde = {
             <label for="pocketMinePath">PocketMine Source Path</label>
             <div class="pmide-input-group">
               <input type="text" id="pocketMinePath" 
-                     value="${this.settings.pocketMinePath || ''}" 
+                     value="${this.currentSettings.pocketMinePath || ''}" 
                      placeholder="Select PocketMine source directory" readonly>
               <button type="button" id="browsePocketMinePath" class="pmide-btn">Browse</button>
             </div>
@@ -117,7 +130,7 @@ const pocketmineIde = {
           
           <div class="pmide-field">
             <label class="pmide-checkbox">
-              <input type="checkbox" id="autoIndex" ${this.settings.autoIndex ? 'checked' : ''}>
+              <input type="checkbox" id="autoIndex" ${this.currentSettings.autoIndex ? 'checked' : ''}>
               <span class="checkmark"></span>
               Auto-index PHP files on startup
             </label>
@@ -126,7 +139,7 @@ const pocketmineIde = {
           
           <div class="pmide-field">
             <label class="pmide-checkbox">
-              <input type="checkbox" id="showCompletionInfo" ${this.settings.showCompletionInfo ? 'checked' : ''}>
+              <input type="checkbox" id="showCompletionInfo" ${this.currentSettings.showCompletionInfo ? 'checked' : ''}>
               <span class="checkmark"></span>
               Show completion information
             </label>
@@ -136,7 +149,7 @@ const pocketmineIde = {
           <div class="pmide-field">
             <label for="maxCompletionItems">Max Completion Items</label>
             <input type="number" id="maxCompletionItems" 
-                   value="${this.settings.maxCompletionItems}" min="10" max="200" step="10">
+                   value="${this.currentSettings.maxCompletionItems}" min="10" max="200" step="10">
             <small>Maximum number of items to show in completion list</small>
           </div>
         </div>
@@ -458,10 +471,10 @@ const pocketmineIde = {
       const maxCompletionItems = parseInt(document.querySelector('#maxCompletionItems')?.value) || 50;
       
       // Update settings
-      this.settings.pocketMinePath = pocketMinePath;
-      this.settings.autoIndex = autoIndex;
-      this.settings.showCompletionInfo = showCompletionInfo;
-      this.settings.maxCompletionItems = maxCompletionItems;
+      this.currentSettings.pocketMinePath = pocketMinePath;
+      this.currentSettings.autoIndex = autoIndex;
+      this.currentSettings.showCompletionInfo = showCompletionInfo;
+      this.currentSettings.maxCompletionItems = maxCompletionItems;
       
       // Save to storage
       this.saveSettings();
@@ -596,7 +609,7 @@ const pocketmineIde = {
         const completions = this.getCompletions(line, prefix, pos);
         
         // Limit completions based on settings
-        const limitedCompletions = completions.slice(0, this.settings.maxCompletionItems);
+        const limitedCompletions = completions.slice(0, this.currentSettings.maxCompletionItems);
         
         callback(null, limitedCompletions);
       }
@@ -641,7 +654,7 @@ const pocketmineIde = {
    * Index PHP files
    */
   async indexPhpFiles() {
-    const pocketMinePath = this.settings.pocketMinePath;
+    const pocketMinePath = this.currentSettings.pocketMinePath;
     
     if (!pocketMinePath) {
       const alertDialog = this.showAlert(
@@ -692,11 +705,66 @@ const pocketmineIde = {
   }
 };
 
+// Define settings configuration for Acode
+const pluginSettings = {
+  list: [
+    {
+      key: 'pocketMinePath',
+      text: 'PocketMine Source Path',
+      info: 'Path to your PocketMine-MP source code directory',
+      value: null,
+      prompt: 'Enter PocketMine source path',
+      promptType: 'text',
+      cb: (key, value) => {
+        pocketmineIde.onSettingsChange(key, value);
+      }
+    },
+    {
+      key: 'autoIndex',
+      text: 'Auto-index PHP files',
+      info: 'Automatically index PHP files when the plugin loads',
+      checkbox: true,
+      value: true,
+      cb: (key, value) => {
+        pocketmineIde.onSettingsChange(key, value);
+      }
+    },
+    {
+      key: 'showCompletionInfo',
+      text: 'Show completion information',
+      info: 'Display additional information in code completion popup',
+      checkbox: true,
+      value: true,
+      cb: (key, value) => {
+        pocketmineIde.onSettingsChange(key, value);
+      }
+    },
+    {
+      key: 'maxCompletionItems',
+      text: 'Max Completion Items',
+      info: 'Maximum number of items to show in completion list',
+      value: 50,
+      prompt: 'Enter max completion items (10-200)',
+      promptType: 'number',
+      promptOptions: {
+        required: true,
+        test: (value) => {
+          const num = parseInt(value);
+          return num >= 10 && num <= 200;
+        }
+      },
+      cb: (key, value) => {
+        pocketmineIde.onSettingsChange(key, parseInt(value));
+      }
+    }
+  ]
+};
+
 // Register plugin with Acode
 if (window.acode) {
   acode.setPluginInit(plugin.id, (baseUrl, $page, options) => {
     pocketmineIde.init(baseUrl, $page, options);
-  });
+  }, pluginSettings);
   
   acode.setPluginUnmount(plugin.id, () => {
     pocketmineIde.destroy();
