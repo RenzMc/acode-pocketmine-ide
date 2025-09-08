@@ -1,0 +1,15 @@
+{
+  "id": "pocketmine.ide",
+  "name": "PocketMine IDE",
+  "version": "0.1.0",
+  "description": "PHP code completion for PocketMine development",
+  "author": {
+    "name": "PocketMine IDE Team",
+    "email": "example@example.com",
+    "github": "https://github.com/example"
+  },
+  "main": "dist/main.js",
+  "icon": "icon.png",
+  "readme": "readme.md",
+  "files": []
+}

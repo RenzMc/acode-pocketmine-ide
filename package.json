@@ -1,0 +1,24 @@
+{
+  "name": "pocketmine-ide-acode",
+  "version": "0.1.0",
+  "description": "PHP code completion for PocketMine development in Acode",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "esbuild ./src/main.js --bundle --outfile=dist/main.js --format=esm --platform=browser",
+    "dev": "esbuild ./src/main.js --bundle --outfile=dist/main.js --format=esm --platform=browser --watch",
+    "package": "npm run build && node pack-zip.js"
+  },
+  "keywords": [
+    "acode",
+    "acode-plugin",
+    "pocketmine",
+    "php",
+    "code-completion"
+  ],
+  "author": "PocketMine IDE Team",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.19.5",
+    "jszip": "^3.10.1"
+  }
+}
