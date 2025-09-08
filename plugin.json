@@ -5,8 +5,8 @@
   "description": "PHP code completion for PocketMine development",
   "author": {
     "name": "PocketMine IDE Team",
-    "email": "example@example.com",
-    "github": "https://github.com/example"
+    "email": "renzaja11@gmail.com",
+    "github": "https://github.com/RenzMc"
   },
   "main": "dist/main.js",
   "icon": "icon.png",
