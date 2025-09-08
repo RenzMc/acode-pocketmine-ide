@@ -19,6 +19,8 @@ A plugin for Acode that provides PHP code completion for PocketMine development.
 1. Install the plugin in Acode
 2. Set the PocketMine path in the plugin settings
 3. Open a PHP file and start coding with autocompletion
+4. Use cntrl shift p and search pocket to open settings
+5. After that, you set the path to the pocketmine source code. 
 
 ## Settings
 
