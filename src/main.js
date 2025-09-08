@@ -37,9 +37,15 @@ const pocketmineIde = {
   
   /**
    * Called when the plugin is loaded
-   * @param {HTMLElement} $page 
+   * @param {string} baseUrl 
+   * @param {WCPage} $page 
+   * @param {object} options
    */
-  async init($page) {
+  async init(baseUrl, $page, options) {
+    this.baseUrl = baseUrl;
+    this.$page = $page;
+    this.cacheFile = options.cacheFile;
+    
     // Load saved settings
     await this.loadSettings();
     
@@ -49,8 +55,8 @@ const pocketmineIde = {
     // Register completion provider
     this.registerCompletionProvider();
     
-    // Add commands
-    this.registerCommands();
+    // Add commands to editor
+    this.registerEditorCommands();
     
     // Auto-index if path is set and auto-index is enabled
     if (this.settings.pocketMinePath && this.settings.autoIndex) {
@@ -59,13 +65,15 @@ const pocketmineIde = {
   },
   
   /**
-   * Load settings from storage
+   * Load settings from cache file
    */
   async loadSettings() {
     try {
-      const savedSettings = localStorage.getItem('pocketmine-ide-settings');
-      if (savedSettings) {
-        this.settings = { ...this.settings, ...JSON.parse(savedSettings) };
+      if (this.cacheFile && await this.cacheFile.exists()) {
+        const data = await this.cacheFile.readFile('utf8');
+        if (data) {
+          this.settings = { ...this.settings, ...JSON.parse(data) };
+        }
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -73,11 +81,13 @@ const pocketmineIde = {
   },
   
   /**
-   * Save settings to storage
+   * Save settings to cache file
    */
   async saveSettings() {
     try {
-      localStorage.setItem('pocketmine-ide-settings', JSON.stringify(this.settings));
+      if (this.cacheFile) {
+        await this.cacheFile.writeFile(JSON.stringify(this.settings));
+      }
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
@@ -396,7 +406,7 @@ const pocketmineIde = {
   },
   
   /**
-   * Browse for PocketMine path
+   * Browse for PocketMine path using Acode's fileBrowser
    */
   async browsePocketMinePath() {
     try {
@@ -409,7 +419,7 @@ const pocketmineIde = {
         if (pathInput) {
           pathInput.value = result.url;
         }
-        this.showToast(`Selected: ${result.name}`);
+        this.showNotification('Path Selected', `Selected: ${result.name}`, { type: 'success' });
       }
     } catch (error) {
       console.log('Folder selection cancelled');
@@ -432,7 +442,7 @@ const pocketmineIde = {
     confirmDialog.ok(() => {
       this.indexer.clearIndex();
       this.updateIndexStatus('Index cleared');
-      this.showToast('Index cleared successfully');
+      this.showNotification('Index Cleared', 'Index cleared successfully', { type: 'success' });
     });
   },
   
@@ -456,10 +466,10 @@ const pocketmineIde = {
       // Save to storage
       this.saveSettings();
       
-      this.showToast('Settings saved successfully!');
+      this.showNotification('Settings Saved', 'Settings saved successfully!', { type: 'success' });
     } catch (error) {
       console.error('Error saving settings:', error);
-      this.showToast('Error saving settings');
+      this.showNotification('Error', 'Error saving settings', { type: 'error' });
     }
   },
   
@@ -474,16 +484,20 @@ const pocketmineIde = {
   },
   
   /**
-   * Show toast message
+   * Show notification using Acode's pushNotification API
    */
-  showToast(message) {
-    // Try to use acode.toast if available
-    if (window.acode && acode.toast) {
-      acode.toast(message);
+  showNotification(title, message, options = {}) {
+    // Use Acode's pushNotification if available (v954+)
+    if (acode.pushNotification) {
+      acode.pushNotification(title, message, {
+        type: options.type || 'info',
+        autoClose: options.autoClose !== false,
+        action: options.action
+      });
     } else {
       // Fallback toast implementation
       const toast = document.createElement('div');
-      toast.textContent = message;
+      toast.textContent = `${title}: ${message}`;
       toast.style.cssText = `
         position: fixed;
         bottom: 20px;
@@ -523,32 +537,38 @@ const pocketmineIde = {
   },
   
   /**
-   * Register commands
+   * Register editor commands using Ace editor commands
    */
-  registerCommands() {
+  registerEditorCommands() {
+    const { commands } = editorManager.editor;
+    
     // Command to open settings
-    acode.registerCommand({
-      name: 'pmide.openSettings',
-      description: 'PocketMine IDE - Open Settings',
+    commands.addCommand({
+      name: 'pmide-open-settings',
+      bindKey: { win: 'Ctrl-Alt-P', mac: 'Command-Alt-P' },
       exec: () => {
         this.createSettingsUI();
-      }
+      },
+      readOnly: true
     });
     
     // Command to manually index PHP files
-    acode.registerCommand({
-      name: 'pmide.indexPhpFiles',
-      description: 'PocketMine IDE - Index PHP Files',
-      exec: this.indexPhpFiles.bind(this)
+    commands.addCommand({
+      name: 'pmide-index-files',
+      bindKey: { win: 'Ctrl-Alt-I', mac: 'Command-Alt-I' },
+      exec: () => {
+        this.indexPhpFiles();
+      },
+      readOnly: true
     });
     
     // Command to clear index
-    acode.registerCommand({
-      name: 'pmide.clearIndex',
-      description: 'PocketMine IDE - Clear Index',
+    commands.addCommand({
+      name: 'pmide-clear-index',
       exec: () => {
         this.clearIndex();
-      }
+      },
+      readOnly: true
     });
   },
   
@@ -556,15 +576,15 @@ const pocketmineIde = {
    * Register the completion provider for PHP files
    */
   registerCompletionProvider() {
-    const editor = acode.editor;
+    const editor = editorManager.editor;
     
     // Register completion provider for PHP files
-    editor.session.completers = editor.session.completers || [];
-    editor.session.completers.push({
+    editor.completers = editor.completers || [];
+    editor.completers.push({
       getCompletions: (editor, session, pos, prefix, callback) => {
         // Only provide completions for PHP files
-        const filePath = acode.activeFile?.uri || '';
-        if (!filePath.endsWith('.php')) {
+        const activeFile = editorManager.activeFile;
+        if (!activeFile || !activeFile.filename.endsWith('.php')) {
           callback(null, []);
           return;
         }
@@ -636,7 +656,7 @@ const pocketmineIde = {
     }
     
     this.updateIndexStatus('Indexing...');
-    this.showToast('Indexing PHP files...');
+    this.showNotification('Indexing', 'Indexing PHP files...', { type: 'info' });
     
     try {
       // Index the PHP files
@@ -644,7 +664,7 @@ const pocketmineIde = {
       
       // Show success message
       this.updateIndexStatus('Indexed successfully');
-      this.showToast('PHP files indexed successfully');
+      this.showNotification('Success', 'PHP files indexed successfully', { type: 'success' });
     } catch (error) {
       // Show error message
       this.updateIndexStatus('Index failed');
@@ -664,21 +684,18 @@ const pocketmineIde = {
       this.settingsDialog.hide();
     }
     
-    // Unregister commands
-    acode.unregisterCommand('pmide.openSettings');
-    acode.unregisterCommand('pmide.indexPhpFiles');
-    acode.unregisterCommand('pmide.clearIndex');
+    // Remove editor commands
+    const { commands } = editorManager.editor;
+    commands.removeCommand('pmide-open-settings');
+    commands.removeCommand('pmide-index-files');
+    commands.removeCommand('pmide-clear-index');
   }
 };
 
+// Register plugin with Acode
 if (window.acode) {
-  acode.setPluginInit(plugin.id, (baseUrl, $page, { cacheFileUrl, cacheFile }) => {
-    if (!baseUrl.endsWith('/')) {
-      baseUrl += '/';
-    }
-    
-    pocketmineIde.baseUrl = baseUrl;
-    pocketmineIde.init($page);
+  acode.setPluginInit(plugin.id, (baseUrl, $page, options) => {
+    pocketmineIde.init(baseUrl, $page, options);
   });
   
   acode.setPluginUnmount(plugin.id, () => {
