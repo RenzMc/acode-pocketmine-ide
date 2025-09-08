@@ -9,42 +9,44 @@ import { PhpIndexer } from './phpIndexer';
 /**
  * @type {import('../types').PluginObject}
  */
-const pocketmineIde = {
-  id: plugin.id,
-  name: plugin.name,
-  version: plugin.version,
-  description: plugin.description,
-  
-  /**
-   * Current settings values
-   */
-  currentSettings: {
-    pocketMinePath: null,
-    autoIndex: true,
-    showCompletionInfo: true,
-    maxCompletionItems: 50
-  },
-  
-  /**
-   * PHP file indexer
-   */
-  indexer: null,
-  
-  /**
-   * Current settings dialog
-   */
-  settingsDialog: null,
+class PocketMineIDE {
+  constructor() {
+    this.id = plugin.id;
+    this.name = plugin.name;
+    this.version = plugin.version;
+    this.description = plugin.description;
+    
+    /**
+     * Current settings values
+     */
+    this.currentSettings = {
+      pocketMinePath: null,
+      autoIndex: true,
+      showCompletionInfo: true,
+      maxCompletionItems: 50
+    };
+    
+    /**
+     * PHP file indexer
+     */
+    this.indexer = null;
+    
+    /**
+     * Current settings dialog
+     */
+    this.settingsDialog = null;
+  }
   
   /**
    * Called when the plugin is loaded
-   * @param {string} baseUrl 
    * @param {WCPage} $page 
-   * @param {object} options
+   * @param {object} cacheFile
+   * @param {string} cacheFileUrl
    */
-  async init(baseUrl, $page, options) {
-    this.baseUrl = baseUrl;
+  async init($page, cacheFile, cacheFileUrl) {
     this.$page = $page;
-    this.cacheFile = options.cacheFile;
+    this.cacheFile = cacheFile;
+    this.cacheFileUrl = cacheFileUrl;
     
     // Load saved settings
     await this.loadSettings();
@@ -62,7 +64,7 @@ const pocketmineIde = {
     if (this.currentSettings.pocketMinePath && this.currentSettings.autoIndex) {
       this.indexPhpFiles();
     }
-  },
+  }
   
   /**
    * Load settings from cache file
@@ -78,7 +80,7 @@ const pocketmineIde = {
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
-  },
+  }
   
   /**
    * Save settings to cache file
@@ -91,7 +93,7 @@ const pocketmineIde = {
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
-  },
+  }
 
   /**
    * Handle settings changes from Acode settings UI
@@ -104,7 +106,7 @@ const pocketmineIde = {
     if (key === 'pocketMinePath' && value && this.currentSettings.autoIndex) {
       this.indexPhpFiles();
     }
-  },
+  }
   
   /**
    * Create settings UI using DialogBox (fallback method)
@@ -394,7 +396,7 @@ const pocketmineIde = {
     });
     
     return this.settingsDialog;
-  },
+  }
   
   /**
    * Handle clicks within the settings dialog
@@ -416,7 +418,7 @@ const pocketmineIde = {
     if (target.id === 'clearIndex') {
       this.clearIndex();
     }
-  },
+  }
   
   /**
    * Browse for PocketMine path using Acode's fileBrowser
@@ -437,7 +439,7 @@ const pocketmineIde = {
     } catch (error) {
       console.log('Folder selection cancelled');
     }
-  },
+  }
   
   /**
    * Clear the PHP index
@@ -457,7 +459,7 @@ const pocketmineIde = {
       this.updateIndexStatus('Index cleared');
       this.showNotification('Index Cleared', 'Index cleared successfully', { type: 'success' });
     });
-  },
+  }
   
   /**
    * Save settings from dialog form
@@ -484,7 +486,7 @@ const pocketmineIde = {
       console.error('Error saving settings:', error);
       this.showNotification('Error', 'Error saving settings', { type: 'error' });
     }
-  },
+  }
   
   /**
    * Update index status display
@@ -494,19 +496,14 @@ const pocketmineIde = {
     if (statusElement) {
       statusElement.textContent = `Index Status: ${status}`;
     }
-  },
+  }
   
   /**
-   * Show notification using Acode's pushNotification API
+   * Show notification using Acode's toast
    */
   showNotification(title, message, options = {}) {
-    // Use Acode's pushNotification if available (v954+)
-    if (acode.pushNotification) {
-      acode.pushNotification(title, message, {
-        type: options.type || 'info',
-        autoClose: options.autoClose !== false,
-        action: options.action
-      });
+    if (window.toast) {
+      window.toast(`${title}: ${message}`, 3000);
     } else {
       // Fallback toast implementation
       const toast = document.createElement('div');
@@ -532,7 +529,7 @@ const pocketmineIde = {
         }
       }, 3000);
     }
-  },
+  }
   
   /**
    * Show alert dialog
@@ -547,43 +544,37 @@ const pocketmineIde = {
     );
     
     return alertDialog;
-  },
+  }
   
   /**
    * Register editor commands using Ace editor commands
    */
   registerEditorCommands() {
-    const { commands } = editorManager.editor;
+    const { editor } = editorManager;
     
     // Command to open settings
-    commands.addCommand({
-      name: 'pmide-open-settings',
-      bindKey: { win: 'Ctrl-Alt-P', mac: 'Command-Alt-P' },
-      exec: () => {
-        this.createSettingsUI();
-      },
-      readOnly: true
+    editor.commands.addCommand({
+      name: "pmide_open_settings",
+      description: "Open PocketMine IDE Settings",
+      bindKey: { win: "Ctrl-Alt-P", mac: "Cmd-Alt-P" },
+      exec: () => this.createSettingsUI()
     });
     
     // Command to manually index PHP files
-    commands.addCommand({
-      name: 'pmide-index-files',
-      bindKey: { win: 'Ctrl-Alt-I', mac: 'Command-Alt-I' },
-      exec: () => {
-        this.indexPhpFiles();
-      },
-      readOnly: true
+    editor.commands.addCommand({
+      name: "pmide_index_files",
+      description: "Index PHP Files",
+      bindKey: { win: "Ctrl-Alt-I", mac: "Cmd-Alt-I" },
+      exec: () => this.indexPhpFiles()
     });
     
     // Command to clear index
-    commands.addCommand({
-      name: 'pmide-clear-index',
-      exec: () => {
-        this.clearIndex();
-      },
-      readOnly: true
+    editor.commands.addCommand({
+      name: "pmide_clear_index",
+      description: "Clear PHP Index",
+      exec: () => this.clearIndex()
     });
-  },
+  }
   
   /**
    * Register the completion provider for PHP files
@@ -614,7 +605,7 @@ const pocketmineIde = {
         callback(null, limitedCompletions);
       }
     });
-  },
+  }
   
   /**
    * Get completions based on the current context
@@ -648,7 +639,7 @@ const pocketmineIde = {
     
     // Default completions (classes, functions)
     return this.indexer.getDefaultCompletions(prefix);
-  },
+  }
   
   /**
    * Index PHP files
@@ -683,7 +674,7 @@ const pocketmineIde = {
       this.updateIndexStatus('Index failed');
       this.showAlert('Error Indexing PHP Files', error.message);
     }
-  },
+  }
   
   /**
    * Called when the plugin is unloaded
@@ -698,77 +689,31 @@ const pocketmineIde = {
     }
     
     // Remove editor commands
-    const { commands } = editorManager.editor;
-    commands.removeCommand('pmide-open-settings');
-    commands.removeCommand('pmide-index-files');
-    commands.removeCommand('pmide-clear-index');
+    const { editor } = editorManager;
+    editor.commands.removeCommand('pmide_open_settings');
+    editor.commands.removeCommand('pmide_index_files');
+    editor.commands.removeCommand('pmide_clear_index');
   }
-};
-
-// Define settings configuration for Acode
-const pluginSettings = {
-  list: [
-    {
-      key: 'pocketMinePath',
-      text: 'PocketMine Source Path',
-      info: 'Path to your PocketMine-MP source code directory',
-      value: null,
-      prompt: 'Enter PocketMine source path',
-      promptType: 'text',
-      cb: (key, value) => {
-        pocketmineIde.onSettingsChange(key, value);
-      }
-    },
-    {
-      key: 'autoIndex',
-      text: 'Auto-index PHP files',
-      info: 'Automatically index PHP files when the plugin loads',
-      checkbox: true,
-      value: true,
-      cb: (key, value) => {
-        pocketmineIde.onSettingsChange(key, value);
-      }
-    },
-    {
-      key: 'showCompletionInfo',
-      text: 'Show completion information',
-      info: 'Display additional information in code completion popup',
-      checkbox: true,
-      value: true,
-      cb: (key, value) => {
-        pocketmineIde.onSettingsChange(key, value);
-      }
-    },
-    {
-      key: 'maxCompletionItems',
-      text: 'Max Completion Items',
-      info: 'Maximum number of items to show in completion list',
-      value: 50,
-      prompt: 'Enter max completion items (10-200)',
-      promptType: 'number',
-      promptOptions: {
-        required: true,
-        test: (value) => {
-          const num = parseInt(value);
-          return num >= 10 && num <= 200;
-        }
-      },
-      cb: (key, value) => {
-        pocketmineIde.onSettingsChange(key, parseInt(value));
-      }
-    }
-  ]
-};
+}
 
 // Register plugin with Acode
 if (window.acode) {
-  acode.setPluginInit(plugin.id, (baseUrl, $page, options) => {
-    pocketmineIde.init(baseUrl, $page, options);
-  }, pluginSettings);
+  const acodePlugin = new PocketMineIDE();
+  
+  acode.setPluginInit(
+    plugin.id,
+    (baseUrl, $page, { cacheFileUrl, cacheFile }) => {
+      if (!baseUrl.endsWith("/")) {
+        baseUrl += "/";
+      }
+      acodePlugin.baseUrl = baseUrl;
+      acodePlugin.init($page, cacheFile, cacheFileUrl);
+    }
+  );
   
   acode.setPluginUnmount(plugin.id, () => {
-    pocketmineIde.destroy();
+    acodePlugin.destroy();
   });
 }
 
-export default pocketmineIde;
+export default PocketMineIDE;
